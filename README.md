@@ -33,6 +33,7 @@ For the following functions you will have to add in your own login and machine i
 `CreateChromeShortcut`
 
 Yes, having the password in plain text is bad practice, but this has already taken up enough of my time
+(I will eventually change this to where you can just copy a sample .env file and put in your own info)
 
 Also ensure both machines are on the same broadcast domain so wake on lan works
 
