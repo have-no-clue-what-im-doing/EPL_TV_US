@@ -71,4 +71,3 @@ Overview of Code:\
 [Code Overview](https://youtu.be/TlYU6IIa4UE) 
 
 I made a small change right after the demo video. I took out locally creating the chrome shortcut and now have it created by using an ssh connection and creating it directly onto the host machine instead.
-"# newcastle_tv" 
