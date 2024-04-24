@@ -5,11 +5,16 @@ from datetime import datetime, timezone, timedelta
 from bs4 import BeautifulSoup
 import paramiko
 import subprocess
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 #Make a request to API to get Newcastle United schedule and return list.
 def GetFixtures():
-    url = "https://api.football-data.org/v4/teams/67/matches"
-    token = "53e06e2ba29e4f9aac750911b6d870d7"
+    url = os.getenv("FOOTBALL_TEAM_API_ENDPOINT") #"http://api.football-data.org/v4/competitions/PL/teams" 
+    token = os.getenv("FOOTBALL_TEAM_API_ENDPOINT_TOKEN")
     headers = {
     'X-Auth-Token': token,
     'Content-Type': 'application/json',
@@ -67,7 +72,7 @@ def PeacockRequest():
     'sec-fetch-dest': 'empty',
     'sec-fetch-mode': 'cors',
     'sec-fetch-site': 'same-site',
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'user-agent': os.getenv("USER_AGENT"),
     'x-skyott-ab-recs': 'SearchExtensionV2:control;fylength:variation2',
     'x-skyott-activeterritory': 'US',
     'x-skyott-bouquetid': '5566233252361580117',
@@ -81,7 +86,7 @@ def PeacockRequest():
     'x-skyott-territory': 'US',
     }
    params = {
-    'term': 'newcastle v',
+    'term': os.getenv("SEARCH_TERM"),
     'limit': '40',
     'entityType': 'programme,series',
     'contentFormat': 'longform',
@@ -90,13 +95,15 @@ def PeacockRequest():
    data = json.loads(response.text)
    return data
     
-#Iterate through list to see if the matchDate from IsItMatchDay() matches with a game on Peacock. (Peacock sets start time 10 minutes before match start)
+#Iterate through list to see if the matchDate from IsItMatchDay() matches with a game on Peacock. (Peacock sets start time 10 minutes before match start) 
+# THIS COULD CHANGE IN THE FUTURE. BE SURE TO UPDATE PEACOCK_START_TIME IN THE .env
 #Add 10 minutes to time to compare
 #Return the specific link to that game if there is a match
 def SearchPeacock(gameTime):
     data = PeacockRequest()
+    peacockTime = int(os.getenv("PEACOCK_START_TIME"))
     matches = data["data"]["search"]["results"]
-    tenMinutesUnix = (10 * 60 * 1000)
+    tenMinutesUnix = (peacockTime * 60 * 1000)
     for match in matches:
         startTime = match["displayStartTime"]
         time = ConvertUnixTimeToUTC(startTime + tenMinutesUnix)
@@ -121,7 +128,7 @@ def GetStreamingLink():
 def GetTVProviderData():
     url = "https://www.tvinsider.com/show/premier-league-soccer/"
     headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
+    'User-Agent': os.getenv("USER_AGENT"),
     'Accept-Language': 'en-US,en;q=0.5',
     }
     r = requests.get(url, headers=headers)
@@ -133,22 +140,23 @@ def GetTVProviderData():
 
 #Find Newcastle's game and determine whether game is on NBC or USA. 
 def FindTVProvider():
+    teamName = os.getenv("TV_INSIDER_TEAM_NAME")
     games = GetTVProviderData()
     for game in games:
-        if "Newcastle" in game.find("h4").text:
+        if teamName in game.find("h4").text:
             if "USA Network" in game.find("h5").text:
                 return "USA"
             else:
                 return "NBC"
-    return "Error, unable to find a Newcastle game for this week"
+    return f"Error, unable to find a {teamName} game for this week"
 
 #If USA, return youtube.tv USA link, and if NBC, return youtube.tv NBC link
 def SearchYoutubeTV():
     tvNetwork = FindTVProvider()
     if tvNetwork == "USA":
-        return "https://tv.youtube.com/watch/M2YyNsA47Lw?utm_servlet=prod&rd_rsn=asi&zipcode=45103&onboard=1&vp=0gEEEgIwAQ%3D%3D"
+        return os.getenv("YOUTUBE_TV_USA_URL")
     if tvNetwork == "NBC":
-        return "https://tv.youtube.com/watch/by5X_xkztY8?utm_servlet=prod&rd_rsn=asi&zipcode=45103&onboard=1&vp=0gEEEgIwAQ%3D%3D"
+        return os.getenv("YOUTUBE_TV_NBC_URL")
     else:
         return "Error, unable to find YoutubeTV provider"
 
@@ -170,6 +178,12 @@ def GetSleepTime():
     timeDiffSecs = timeDiff.total_seconds()
     print(timeDiffSecs)
     return timeDiffSecs
+
+
+#Power on computer using wakeonlan. Note: must run "sudo apt-get install wakeonlan" first for this command to work. Also must enable WOL on host machine
+def PowerOnComputerDebian(mac):
+    subprocess.run(f"wakeonlan {mac}", shell=True, capture_output=True, text=True)
+    return "Computer Powered On"
 
 #Credit: https://stackoverflow.com/questions/72853502/how-to-send-a-wake-on-lan-magic-packet-using-powershell
 def PowerOnComputer(mac):
@@ -249,4 +263,5 @@ def WatchNewcastleMatch():
 
 if __name__ == "__main__":
     print(WatchNewcastleMatch())
+    
 
