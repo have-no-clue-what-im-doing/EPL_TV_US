@@ -39,7 +39,8 @@ def GetCurrentDate():
 #Convert the current time to UTC and format it.
 def ConvertUnixTimeToUTC(time):
     unixInSeconds = time / 1000
-    utcTime = datetime.utcfromtimestamp(unixInSeconds).replace(tzinfo=timezone.utc)
+    utcTime = datetime.fromtimestamp(unixInSeconds).replace(tzinfo=timezone.utc)
+    print(utcTime)
     utcTimeFormatted = utcTime.strftime('%Y-%m-%dT%H:%M:%SZ')
     return utcTimeFormatted
 
@@ -96,7 +97,7 @@ def PeacockRequest():
    return data
     
 #Iterate through list to see if the matchDate from IsItMatchDay() matches with a game on Peacock. (Peacock sets start time 10 minutes before match start) 
-# THIS COULD CHANGE IN THE FUTURE. BE SURE TO UPDATE PEACOCK_START_TIME IN THE .env
+# THIS COULD CHANGE IN THE FUTURE. BE SURE TO UPDATE PEACOCK_START_TIME in the .env
 #Add 10 minutes to time to compare
 #Return the specific link to that game if there is a match
 def SearchPeacock(gameTime):
@@ -173,7 +174,7 @@ def GetComputerStartTime():
 def GetSleepTime():
     startTime = GetComputerStartTime()
     convertStartTime = datetime.strptime(startTime, "%Y-%m-%dT%H:%M:%SZ")
-    currentTime = datetime.utcnow()
+    currentTime = datetime.now(tz=timezone.utc)
     timeDiff = convertStartTime - currentTime
     timeDiffSecs = timeDiff.total_seconds()
     print(timeDiffSecs)
@@ -263,5 +264,6 @@ def WatchNewcastleMatch():
 
 if __name__ == "__main__":
     print(WatchNewcastleMatch())
+    
     
 
