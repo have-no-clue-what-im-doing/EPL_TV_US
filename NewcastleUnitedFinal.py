@@ -13,7 +13,8 @@ load_dotenv()
 
 #Make a request to API to get Newcastle United schedule and return list.
 def GetFixtures():
-    url = os.getenv("FOOTBALL_TEAM_API_ENDPOINT") #"http://api.football-data.org/v4/competitions/PL/teams" 
+    footballID = os.getenv("FOOTBALL_TEAM_ID")
+    url = f"https://api.football-data.org/v4/teams/{footballID}/matches" #"http://api.football-data.org/v4/competitions/PL/teams" 
     token = os.getenv("FOOTBALL_TEAM_API_ENDPOINT_TOKEN")
     headers = {
     'X-Auth-Token': token,
@@ -39,9 +40,10 @@ def GetCurrentDate():
 #Convert the current time to UTC and format it.
 def ConvertUnixTimeToUTC(time):
     unixInSeconds = time / 1000
-    utcTime = datetime.fromtimestamp(unixInSeconds).replace(tzinfo=timezone.utc)
-    print(utcTime)
+    utcTime = datetime.fromtimestamp(unixInSeconds, tz=timezone.utc)
+    
     utcTimeFormatted = utcTime.strftime('%Y-%m-%dT%H:%M:%SZ')
+    print(f'UTC TIME: {utcTimeFormatted}')
     return utcTimeFormatted
 
 #Make API request to see if there is a match on this current day. If there is, confirm it is a Premier League game. 
@@ -94,6 +96,8 @@ def PeacockRequest():
     }
    response = requests.get('https://web.clients.peacocktv.com/bff/search/v2', params=params, headers=headers)
    data = json.loads(response.text)
+   print(data)
+   print(os.getenv("SEARCH_TERM"))
    return data
     
 #Iterate through list to see if the matchDate from IsItMatchDay() matches with a game on Peacock. (Peacock sets start time 10 minutes before match start) 
@@ -107,7 +111,11 @@ def SearchPeacock(gameTime):
     tenMinutesUnix = (peacockTime * 60 * 1000)
     for match in matches:
         startTime = match["displayStartTime"]
+        print(startTime)
         time = ConvertUnixTimeToUTC(startTime + tenMinutesUnix)
+        
+        print(f'this is the time we have: {gameTime}')
+        print(f'peackcod time: {time}')
         if gameTime == time:
             gameLink = match["slug"]
             return "https://peacocktv.com" + gameLink
@@ -119,7 +127,7 @@ def GetStreamingLink():
     if confirmMatch == "No matches today":
         return "No matches today"
     else:
-        confirmPeacock = SearchPeacock(confirmMatch)
+        confirmPeacock = print(SearchPeacock(confirmMatch))
         if confirmPeacock == "Error: No matches found":
             return SearchYoutubeTV()
         else:
@@ -174,7 +182,9 @@ def GetComputerStartTime():
 def GetSleepTime():
     startTime = GetComputerStartTime()
     convertStartTime = datetime.strptime(startTime, "%Y-%m-%dT%H:%M:%SZ")
+    print(convertStartTime)
     currentTime = datetime.now(tz=timezone.utc)
+    print(currentTime)
     timeDiff = convertStartTime - currentTime
     timeDiffSecs = timeDiff.total_seconds()
     print(timeDiffSecs)
@@ -205,6 +215,16 @@ def PowerOnComputer(mac):
     '''
     subprocess.run(['powershell', '-Command', wakeOnLanCommand], capture_output=True, text=True)
     return "Computer Powered On"
+
+
+def DeterminePowerMethod(machineType):
+    if machineType == "Windows":
+        PowerOnComputer(os.getenv("CLIENT_MAC_ADDRESS"))
+    elif machineType == "Linux":
+        PowerOnComputerDebian(os.getenv("CLIENT_MAC_ADDRESS"))
+    else:
+        return "Error, machine type not defined"
+
 
 #Connect to remote computer via ssh and send a restart command
 def RestartComputer():
@@ -252,10 +272,10 @@ def WatchNewcastleMatch():
     if getMatchLink == "No matches today":
         return "No matches today"
     else: 
-        waitForMatch = GetSleepTime()
-        time.sleep(waitForMatch)
+        #waitForMatch = GetSleepTime()
+        #time.sleep(waitForMatch)
         matchLink = GetStreamingLink()
-        PowerOnComputer("d8:bb:c1:0d:25:bb")
+        DeterminePowerMethod(os.getenv("CLIENT_MACHINE_TYPE"))
         time.sleep(120)
         CreateChromeShortcut(matchLink)
         time.sleep(15)
