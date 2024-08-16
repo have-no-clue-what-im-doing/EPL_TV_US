@@ -110,9 +110,17 @@ def SearchPeacock(gameTime):
     matches = data["data"]["search"]["results"]
     tenMinutesUnix = (peacockTime * 60 * 1000)
     for match in matches:
-        startTime = match["displayStartTime"]
-        print(startTime)
-        time = ConvertUnixTimeToUTC(startTime + tenMinutesUnix)
+        findMatchTime = []
+        for key in match:
+            print(key)
+            findMatchTime.append(key)
+        if "displayStartTime" not in findMatchTime:
+            pass
+        else:
+            print(match)
+            startTime = match["displayStartTime"]
+            print(startTime)
+            time = ConvertUnixTimeToUTC(startTime + tenMinutesUnix)
         
         print(f'this is the time we have: {gameTime}')
         print(f'peackcod time: {time}')
@@ -181,7 +189,7 @@ def GetComputerStartTime():
 #We want to wait until 15 minutes before game to turn on computer
 def GetSleepTime():
     startTime = GetComputerStartTime()
-    convertStartTime = datetime.strptime(startTime, "%Y-%m-%dT%H:%M:%SZ")
+    convertStartTime = datetime.fromisoformat(startTime)
     print(convertStartTime)
     currentTime = datetime.now(tz=timezone.utc)
     print(currentTime)
@@ -228,10 +236,10 @@ def DeterminePowerMethod(machineType):
 
 #Connect to remote computer via ssh and send a restart command
 def RestartComputer():
-    hostname = '192.168.1.114'
+    hostname = os.getenv("CLIENT_IP_ADDRESS")
     port = 22
-    username = 'Broderic'
-    password = 'newcastle123'
+    username = os.getenv("CLIENT_USERNAME")
+    password = 'os.getenv("CLIENT_PASSWORD")'
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(hostname, port, username, password)
@@ -272,8 +280,9 @@ def WatchNewcastleMatch():
     if getMatchLink == "No matches today":
         return "No matches today"
     else: 
-        #waitForMatch = GetSleepTime()
-        #time.sleep(waitForMatch)
+        print("it working???")
+        waitForMatch = GetSleepTime()
+        time.sleep(waitForMatch)
         matchLink = GetStreamingLink()
         DeterminePowerMethod(os.getenv("CLIENT_MACHINE_TYPE"))
         time.sleep(120)
