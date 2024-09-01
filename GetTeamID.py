@@ -24,3 +24,4 @@ def GetTeamIDs():
 
 teamIDs = GetTeamIDs()
 print(teamIDs)
+

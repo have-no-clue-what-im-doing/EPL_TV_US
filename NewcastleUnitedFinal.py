@@ -58,6 +58,17 @@ def IsItMatchDay():
                 return matchDate
     return "No matches today"
 
+#Get status of the match. Determine if match is in play, paused, or finished
+def GetMatchStatus():
+    matches = GetFixtures()
+    for match in matches:
+        if match["competition"]["name"] == "Premier League":
+            currentDate = GetCurrentDate()
+            matchDate = match["utcDate"]
+            if currentDate in matchDate:
+                return match["status"]
+    return "No matches today, unable to get status"
+
 #Make a search using the term "Newcastle v" to list recent upcoming games. Return list of Newcastle games.
 #I copied this request using Chrome dev tools. This is something that has a high chance of breaking in the future if Peacock changes anything.
 def PeacockRequest():
@@ -135,7 +146,7 @@ def GetStreamingLink():
     if confirmMatch == "No matches today":
         return "No matches today"
     else:
-        confirmPeacock = print(SearchPeacock(confirmMatch))
+        confirmPeacock = SearchPeacock(confirmMatch)
         if confirmPeacock == "Error: No matches found":
             return SearchYoutubeTV()
         else:
@@ -158,6 +169,7 @@ def GetTVProviderData():
 #Find Newcastle's game and determine whether game is on NBC or USA. 
 def FindTVProvider():
     teamName = os.getenv("TV_INSIDER_TEAM_NAME")
+    print(f"TV provider name: {teamName}")
     games = GetTVProviderData()
     for game in games:
         if teamName in game.find("h4").text:
@@ -169,6 +181,7 @@ def FindTVProvider():
 
 #If USA, return youtube.tv USA link, and if NBC, return youtube.tv NBC link
 def SearchYoutubeTV():
+    print("Searching youtube")
     tvNetwork = FindTVProvider()
     if tvNetwork == "USA":
         return os.getenv("YOUTUBE_TV_USA_URL")
@@ -227,10 +240,13 @@ def PowerOnComputer(mac):
 
 def DeterminePowerMethod(machineType):
     if machineType == "Windows":
+        print("it is windows")
         PowerOnComputer(os.getenv("CLIENT_MAC_ADDRESS"))
     elif machineType == "Linux":
+        print("it is linux")
         PowerOnComputerDebian(os.getenv("CLIENT_MAC_ADDRESS"))
     else:
+        print(f"no machine defined {machineType}")
         return "Error, machine type not defined"
 
 
@@ -239,7 +255,7 @@ def RestartComputer():
     hostname = os.getenv("CLIENT_IP_ADDRESS")
     port = 22
     username = os.getenv("CLIENT_USERNAME")
-    password = 'os.getenv("CLIENT_PASSWORD")'
+    password = os.getenv("CLIENT_PASSWORD")
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(hostname, port, username, password)
@@ -247,20 +263,33 @@ def RestartComputer():
     ssh.close()
     return "Computer has been restarted! Game is ready to watch!"
 
+def ShutdownComputer():
+    hostname = os.getenv("CLIENT_IP_ADDRESS")
+    port = 22
+    username = os.getenv("CLIENT_USERNAME")
+    password = os.getenv("CLIENT_PASSWORD")
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(hostname, port, username, password)
+    ssh.exec_command("shutdown /f /s /t 0")
+    ssh.close()
+    return "Computer has been restarted! Game is ready to watch!"
+
 #Create a Chrome shortcut with the match link in the Windows Startup Folder using Powershell. 
 def CreateChromeShortcut(link):
-    hostname = '192.168.1.114'
+    hostname = os.getenv("CLIENT_IP_ADDRESS")
     port = 22
-    username = 'broderic'
-    password = 'newcastle123'
+    username = os.getenv("CLIENT_USERNAME")
+    password = os.getenv("CLIENT_PASSWORD")
+    print(hostname, username, password)
     powershellCommands = f'''
     $chromePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
     $targetURL = "{link}";
-    $shortcutPath = "C:\\Users\\Broderic\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Newcastle.lnk";
+    $shortcutPath = "C:\\Users\\{username}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Newcastle.lnk";
     $wshShell = New-Object -ComObject WScript.Shell;
     $shortcut = $wshShell.CreateShortcut($shortcutPath);
     $shortcut.TargetPath = $chromePath;
-    $shortcut.Arguments = "$targetURL --start-fullscreen";
+    $shortcut.Arguments = "$targetURL --start-fullscreen --autoplay-policy=no-user-gesture-required";
     $shortcut.Description = "Google Chrome - Fullscreen";
     $shortcut.IconLocation = "$chromePath,0";
     $shortcut.WorkingDirectory = "C:\\Program Files\\Google\\Chrome\\Application";
@@ -274,22 +303,37 @@ def CreateChromeShortcut(link):
     print(f"Created Chrome Shortcut to this url: {link}")
     return "Created Chrome Shortcut"
 
+def CheckForFinishedMatch(interval):
+    if GetMatchStatus() == "FINISHED":
+        print("Match is complete, shutting down...")
+        ShutdownComputer()
+    else:
+        time.sleep(interval)
+        CheckForFinishedMatch(interval)
+        
+
 #Determine if there is a match today, and if there is, find the link for the proper network and run it on the remote computer.
 def WatchNewcastleMatch():
     getMatchLink = GetStreamingLink()
     if getMatchLink == "No matches today":
         return "No matches today"
     else: 
-        print("it working???")
         waitForMatch = GetSleepTime()
-        time.sleep(waitForMatch)
-        matchLink = GetStreamingLink()
-        DeterminePowerMethod(os.getenv("CLIENT_MACHINE_TYPE"))
-        time.sleep(120)
-        CreateChromeShortcut(matchLink)
-        time.sleep(15)
-        RestartComputer()
-        return "All commands sent successfully, game is ready to watch!"
+        if waitForMatch > 0:
+            time.sleep(waitForMatch)
+        if waitForMatch < 0 and GetMatchStatus() == "FINISHED":
+            return "Match has already been played out. No match to watch"
+        else:
+            DeterminePowerMethod(os.getenv("CLIENT_MACHINE_TYPE"))
+            time.sleep(120)
+            CreateChromeShortcut(getMatchLink)
+            time.sleep(15)
+            RestartComputer()
+            print("All commands sent successfully, game is ready to watch!")
+            shutdown = os.getenv("SHUT_DOWN_MACHINE")
+            if shutdown == "True":
+                print("Shutting down machine after match has been enabled. Checking every 10 minutes...")
+                CheckForFinishedMatch(600)
 
 if __name__ == "__main__":
     print(WatchNewcastleMatch())
