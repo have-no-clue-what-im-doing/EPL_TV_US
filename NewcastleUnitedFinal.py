@@ -1,3 +1,4 @@
+import logging
 import requests
 import json
 import time
@@ -9,6 +10,9 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logging.basicConfig(filename="EPL.log", level=logging.INFO, format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
+
 
 
 #Make a request to API to get Newcastle United schedule and return list.
@@ -41,9 +45,7 @@ def GetCurrentDate():
 def ConvertUnixTimeToUTC(time):
     unixInSeconds = time / 1000
     utcTime = datetime.fromtimestamp(unixInSeconds, tz=timezone.utc)
-    
     utcTimeFormatted = utcTime.strftime('%Y-%m-%dT%H:%M:%SZ')
-    print(f'UTC TIME: {utcTimeFormatted}')
     return utcTimeFormatted
 
 #Make API request to see if there is a match on this current day. If there is, confirm it is a Premier League game. 
@@ -72,6 +74,7 @@ def GetMatchStatus():
 #Make a search using the term "Newcastle v" to list recent upcoming games. Return list of Newcastle games.
 #I copied this request using Chrome dev tools. This is something that has a high chance of breaking in the future if Peacock changes anything.
 def PeacockRequest():
+   logging.info(f"Sending API request to Peacock...")
    headers = {
     'authority': 'web.clients.peacocktv.com',
     'accept': '*/*',
@@ -107,8 +110,6 @@ def PeacockRequest():
     }
    response = requests.get('https://web.clients.peacocktv.com/bff/search/v2', params=params, headers=headers)
    data = json.loads(response.text)
-   print(data)
-   print(os.getenv("SEARCH_TERM"))
    return data
     
 #Iterate through list to see if the matchDate from IsItMatchDay() matches with a game on Peacock. (Peacock sets start time 10 minutes before match start) 
@@ -116,6 +117,7 @@ def PeacockRequest():
 #Add 10 minutes to time to compare
 #Return the specific link to that game if there is a match
 def SearchPeacock(gameTime):
+    logging.info(f"Iterating through list of games from Peacock API request")
     data = PeacockRequest()
     peacockTime = int(os.getenv("PEACOCK_START_TIME"))
     matches = data["data"]["search"]["results"]
@@ -123,21 +125,16 @@ def SearchPeacock(gameTime):
     for match in matches:
         findMatchTime = []
         for key in match:
-            print(key)
             findMatchTime.append(key)
         if "displayStartTime" not in findMatchTime:
             pass
         else:
-            print(match)
             startTime = match["displayStartTime"]
-            print(startTime)
             time = ConvertUnixTimeToUTC(startTime + tenMinutesUnix)
-        
-        print(f'this is the time we have: {gameTime}')
-        print(f'peackcod time: {time}')
         if gameTime == time:
             gameLink = match["slug"]
             return "https://peacocktv.com" + gameLink
+    logging.error(f"Unable to find match on Peacock")
     return "Error: No matches found"
 
 #First check to see if game is on Peacock, if not, web scrape TVInsider to see if game is on NBC or USA.
@@ -148,12 +145,15 @@ def GetStreamingLink():
     else:
         confirmPeacock = SearchPeacock(confirmMatch)
         if confirmPeacock == "Error: No matches found":
+            logging.info("No matches found on Peacock, searching YoutubeTV...")
             return SearchYoutubeTV()
         else:
+            logging.info("Match found on Peacock!")
             return confirmPeacock
 
 #Scrape webpage and return list of EPL games scheduled for the week.
 def GetTVProviderData():
+    logging.info("Web scraping tvinsider for game...")
     url = "https://www.tvinsider.com/show/premier-league-soccer/"
     headers = {
     'User-Agent': os.getenv("USER_AGENT"),
@@ -169,25 +169,27 @@ def GetTVProviderData():
 #Find Newcastle's game and determine whether game is on NBC or USA. 
 def FindTVProvider():
     teamName = os.getenv("TV_INSIDER_TEAM_NAME")
-    print(f"TV provider name: {teamName}")
     games = GetTVProviderData()
     for game in games:
         if teamName in game.find("h4").text:
             if "USA Network" in game.find("h5").text:
+                logging.info("Game found on USA network!")
                 return "USA"
             else:
+                logging.info("Game found on NBC network!")
                 return "NBC"
+    logging.error(f"Error, unable to find a {teamName} game for this week")
     return f"Error, unable to find a {teamName} game for this week"
 
 #If USA, return youtube.tv USA link, and if NBC, return youtube.tv NBC link
 def SearchYoutubeTV():
-    print("Searching youtube")
     tvNetwork = FindTVProvider()
     if tvNetwork == "USA":
         return os.getenv("YOUTUBE_TV_USA_URL")
     if tvNetwork == "NBC":
         return os.getenv("YOUTUBE_TV_NBC_URL")
     else:
+        logging.error(f"Error, unable to find YoutubeTV provider")
         return "Error, unable to find YoutubeTV provider"
 
 #Calculate time 15 minutes before start of match     
@@ -203,22 +205,21 @@ def GetComputerStartTime():
 def GetSleepTime():
     startTime = GetComputerStartTime()
     convertStartTime = datetime.fromisoformat(startTime)
-    print(convertStartTime)
     currentTime = datetime.now(tz=timezone.utc)
-    print(currentTime)
     timeDiff = convertStartTime - currentTime
     timeDiffSecs = timeDiff.total_seconds()
-    print(timeDiffSecs)
     return timeDiffSecs
 
 
 #Power on computer using wakeonlan. Note: must run "sudo apt-get install wakeonlan" first for this command to work. Also must enable WOL on host machine
 def PowerOnComputerDebian(mac):
+    logging.info(f"Powering on computer from Linux machine")
     subprocess.run(f"wakeonlan {mac}", shell=True, capture_output=True, text=True)
     return "Computer Powered On"
 
 #Credit: https://stackoverflow.com/questions/72853502/how-to-send-a-wake-on-lan-magic-packet-using-powershell
 def PowerOnComputer(mac):
+    logging.info(f"Powering on computer from Windows machine")
     wakeOnLanCommand = f''' 
     $mac = '{mac}';
     [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object {{ $_.NetworkInterfaceType -ne [System.Net.NetworkInformation.NetworkInterfaceType]::Loopback -and $_.OperationalStatus -eq [System.Net.NetworkInformation.OperationalStatus]::Up }} | ForEach-Object {{
@@ -240,18 +241,17 @@ def PowerOnComputer(mac):
 
 def DeterminePowerMethod(machineType):
     if machineType == "Windows":
-        print("it is windows")
         PowerOnComputer(os.getenv("CLIENT_MAC_ADDRESS"))
     elif machineType == "Linux":
-        print("it is linux")
         PowerOnComputerDebian(os.getenv("CLIENT_MAC_ADDRESS"))
     else:
-        print(f"no machine defined {machineType}")
+        logging.error(f"Error, machine type not defined!")
         return "Error, machine type not defined"
 
 
 #Connect to remote computer via ssh and send a restart command
 def RestartComputer():
+    logging.info(f"Restarting computer...")
     hostname = os.getenv("CLIENT_IP_ADDRESS")
     port = 22
     username = os.getenv("CLIENT_USERNAME")
@@ -264,6 +264,7 @@ def RestartComputer():
     return "Computer has been restarted! Game is ready to watch!"
 
 def ShutdownComputer():
+    logging.info(f"Shutting down computer...")
     hostname = os.getenv("CLIENT_IP_ADDRESS")
     port = 22
     username = os.getenv("CLIENT_USERNAME")
@@ -273,7 +274,7 @@ def ShutdownComputer():
     ssh.connect(hostname, port, username, password)
     ssh.exec_command("shutdown /f /s /t 0")
     ssh.close()
-    return "Computer has been restarted! Game is ready to watch!"
+    return "Computer has been shutdown"
 
 #Create a Chrome shortcut with the match link in the Windows Startup Folder using Powershell. 
 def CreateChromeShortcut(link):
@@ -281,7 +282,6 @@ def CreateChromeShortcut(link):
     port = 22
     username = os.getenv("CLIENT_USERNAME")
     password = os.getenv("CLIENT_PASSWORD")
-    print(hostname, username, password)
     powershellCommands = f'''
     $chromePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
     $targetURL = "{link}";
@@ -300,12 +300,12 @@ def CreateChromeShortcut(link):
     ssh.connect(hostname, port, username, password)
     ssh.exec_command(powershellCommands)
     ssh.close()
-    print(f"Created Chrome Shortcut to this url: {link}")
+    logging.info(f"Created Chrome Shortcut to this url: {link}")
     return "Created Chrome Shortcut"
 
 def CheckForFinishedMatch(interval):
     if GetMatchStatus() == "FINISHED":
-        print("Match is complete, shutting down...")
+        logging.info("Match is complete, shutting down...")
         ShutdownComputer()
     else:
         time.sleep(interval)
@@ -314,29 +314,41 @@ def CheckForFinishedMatch(interval):
 
 #Determine if there is a match today, and if there is, find the link for the proper network and run it on the remote computer.
 def WatchNewcastleMatch():
+    logging.info(f"Getting match link.")
     getMatchLink = GetStreamingLink()
     if getMatchLink == "No matches today":
+        logging.info(f"There are no matches today.")
         return "No matches today"
     else: 
+        logging.info(f"Calculating when match will start / if already started")
         waitForMatch = GetSleepTime()
         if waitForMatch > 0:
+            logging.info(f"Match will start in {waitForMatch} seconds")
             time.sleep(waitForMatch)
-        if waitForMatch < 0 and GetMatchStatus() == "FINISHED":
+        if waitForMatch <= 0 and GetMatchStatus() == "FINISHED":
+            logging.info(f"Match has already been played out. No match to watch")
             return "Match has already been played out. No match to watch"
         else:
+            logging.info(f"Beginning machine start up")
+            logging.info(f"Determining client OS")
             DeterminePowerMethod(os.getenv("CLIENT_MACHINE_TYPE"))
+            logging.info(f"Waiting 2 minutes while computer boots")
             time.sleep(120)
+            logging.info(f"Creating Chrome shortcut")
             CreateChromeShortcut(getMatchLink)
+            logging.info(f"Waiting 15 seconds before restarting...")
             time.sleep(15)
+            logging.info(f"Restarting computer...")
             RestartComputer()
-            print("All commands sent successfully, game is ready to watch!")
+            logging.info(f"All commands sent successfully, game is ready to watch!")
             shutdown = os.getenv("SHUT_DOWN_MACHINE")
             if shutdown == "True":
-                print("Shutting down machine after match has been enabled. Checking every 10 minutes...")
+                logging.info(f"Shutting down machine after match has been enabled. Checking every 10 minutes...")
                 CheckForFinishedMatch(600)
 
 if __name__ == "__main__":
-    print(WatchNewcastleMatch())
+    WatchNewcastleMatch()
+    
     
     
 
