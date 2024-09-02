@@ -11,7 +11,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-logging.basicConfig(filename="EPL.log", level=logging.INFO, format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
+script_dir = os.path.dirname(os.path.abspath(__file__))
+log_file_path = os.path.join(script_dir, "EPL.log")
+logging.basicConfig(filename=log_file_path, level=logging.INFO, format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
 
 
@@ -282,25 +284,33 @@ def CreateChromeShortcut(link):
     port = 22
     username = os.getenv("CLIENT_USERNAME")
     password = os.getenv("CLIENT_PASSWORD")
-    powershellCommands = f'''
-    $chromePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
-    $targetURL = "{link}";
-    $shortcutPath = "C:\\Users\\{username}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Newcastle.lnk";
-    $wshShell = New-Object -ComObject WScript.Shell;
-    $shortcut = $wshShell.CreateShortcut($shortcutPath);
-    $shortcut.TargetPath = $chromePath;
-    $shortcut.Arguments = "$targetURL --start-fullscreen --autoplay-policy=no-user-gesture-required";
-    $shortcut.Description = "Google Chrome - Fullscreen";
-    $shortcut.IconLocation = "$chromePath,0";
-    $shortcut.WorkingDirectory = "C:\\Program Files\\Google\\Chrome\\Application";
-    $shortcut.Save();
+    print(hostname, username, password)
+    powershellScript = f'''
+    $chromePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+    $targetURL = "{link}"
+    $shortcutPath = "C:\\Users\\{username}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Newcastle.lnk"
+    $wshShell = New-Object -ComObject WScript.Shell
+    $shortcut = $wshShell.CreateShortcut($shortcutPath)
+    $shortcut.TargetPath = $chromePath
+    $shortcut.Arguments = "$targetURL --start-fullscreen --autoplay-policy=no-user-gesture-required"
+    $shortcut.Description = "Google Chrome - Fullscreen"
+    $shortcut.IconLocation = "$chromePath,0"
+    $shortcut.WorkingDirectory = "C:\\Program Files\\Google\\Chrome\\Application"
+    $shortcut.Save()
     '''
+
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(hostname, port, username, password)
-    ssh.exec_command(powershellCommands)
+    temp_script_path = f"C:\\Users\\{username}\\AppData\\Local\\Temp\\create_shortcut.ps1"
+    sftp = ssh.open_sftp()
+    with sftp.file(temp_script_path, 'w') as script_file:
+        script_file.write(powershellScript)
+    sftp.close()
+    ssh.exec_command(f'powershell -ExecutionPolicy Bypass -File "{temp_script_path}"')
+    ssh.exec_command(f'del "{temp_script_path}"')
     ssh.close()
-    logging.info(f"Created Chrome Shortcut to this url: {link}")
+    logging.info(f"Created Chrome Shortcut to this URL: {link}")
     return "Created Chrome Shortcut"
 
 def CheckForFinishedMatch(interval):
@@ -347,7 +357,8 @@ def WatchNewcastleMatch():
                 CheckForFinishedMatch(600)
 
 if __name__ == "__main__":
-    WatchNewcastleMatch()
+    #WatchNewcastleMatch()
+    CreateChromeShortcut("https://youtube.com")
     
     
     
