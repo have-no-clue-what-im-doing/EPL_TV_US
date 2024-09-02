@@ -284,7 +284,6 @@ def CreateChromeShortcut(link):
     port = 22
     username = os.getenv("CLIENT_USERNAME")
     password = os.getenv("CLIENT_PASSWORD")
-    print(hostname, username, password)
     powershellScript = f'''
     $chromePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
     $targetURL = "{link}"
@@ -357,8 +356,7 @@ def WatchNewcastleMatch():
                 CheckForFinishedMatch(600)
 
 if __name__ == "__main__":
-    #WatchNewcastleMatch()
-    CreateChromeShortcut("https://youtube.com")
+    WatchNewcastleMatch()
     
     
     
